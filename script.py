@@ -17,7 +17,6 @@ client = MongoClient("mongodb://localhost:27017")
 db = client.MSDSOnline
 collection = db.collection
 
-collection.delete_many({})
 
 fields = ['product_name', 'product_description', 'manufacturer_name']
 
@@ -41,14 +40,9 @@ def validate(elem):
 
 s_url = url
 
-# driver = webdriver.PhantomJS() # or add to your PATH
 driver = webdriver.Chrome(".//chromedriver")
-# driver.set_window_size(1024, 768) # optional
-driver.set_window_position(0,0)
 
-all_data = {}
-for k in fields:
-	all_data[k] = []
+driver.set_window_position(0,0)
 
 csv_writer = None
 
@@ -59,18 +53,21 @@ csv_writer.writerow(fields)
 
 for s_key in search_keys:
 
+	print "SEARCHING KEY   ---   " + str(s_key) + "   ---   "
+
 	driver.get(s_url)
 	inputElement = driver.find_element_by_xpath("//div[contains(@class, 'bar')]/input")
 	inputElement.send_keys(s_key)
 	inputElement.send_keys(Keys.ENTER)
 	nxt_page = False
 
-	time.sleep(1)
-	print 'Time sleep 1 ended'
-	element = WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.XPATH, '//div[@class="throbberDummy"]')))
-	print 'Element visibility checking ended'
-	time.sleep(1)
-
+	try:
+		time.sleep(1)
+		element = WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.XPATH, '//div[@class="throbberDummy"]')))
+		print 'Page loaded'
+		time.sleep(1)
+	except:
+		continue
 
 	pg_num = 0
 
@@ -78,15 +75,15 @@ for s_key in search_keys:
 
 		pg_num = pg_num + 1
 
-		# if pg_num > 2:
-		# 	print "TEST BREAK on PG 2"
-		# 	break
+		print "Scrapping Page  " + str(pg_num)
 
-		time.sleep(1)
-		print 'Time sleep 1 ended'
-		element = WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.XPATH, '//div[@class="throbberDummy"]')))
-		print 'Element visibility checking ended'
-		time.sleep(1)
+		try:
+			time.sleep(1)
+			element = WebDriverWait(driver, 10).until(EC.invisibility_of_element_located((By.XPATH, '//div[@class="throbberDummy"]')))
+			print 'Page loaded'
+			time.sleep(1)
+		except:
+			break
 
 		body = html.fromstring(driver.page_source)
 
@@ -96,19 +93,17 @@ for s_key in search_keys:
 			product_name = ' '.join(product_item.xpath('./a[@class="name"]//text()'))
 			product_description = ' '.join(product_item.xpath('./div[@class="synonyms"]//text()'))
 			manufacturer_name = ' '.join(product_item.xpath('./div[@class="manufacturer"]//text()'))
-			all_data['product_name'].append(product_name)
-			all_data['product_description'].append(product_description)
-			all_data['manufacturer_name'].append(manufacturer_name)
 			one_row = {
-				'product_name': product_name, 
-				'product_description': product_description, 
-				'manufacturer_name': manufacturer_name
+				'product_name': unicode(product_name).encode('utf-8'), 
+				'product_description': unicode(product_description).encode('utf-8'), 
+				'manufacturer_name': unicode(manufacturer_name).encode('utf-8')
 				}
+			print one_row
 			collection.insert_one(one_row)
-			csv_writer.writerow([unicode(item).encode("utf-8") for key, item in one_row.items()])
-			# pdb.set_trace()
+			csv_writer.writerow([one_row[key] for key in fields])
 
 		if len(product_items) == 0:
+			print 'Finished : Empty page'
 			break
 
 		try:
@@ -118,9 +113,9 @@ for s_key in search_keys:
 				.click(elem) \
 				.key_up(Keys.CONTROL) \
 				.perform()
-			print "Going to next Page  " + str(pg_num)
+			print "Going to next Page  " + str(pg_num + 1)
 		except:
-			print 'Next page click Failed'
+			print 'Finished : End of pages'
 			break
 
 try:
@@ -130,8 +125,6 @@ try:
 
 except:
 	pass
-
-print all_data
 
 
 cursor = db.collection.find()
